@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Dimensions, Text, ScrollView } from 'react-native';
 import { CustomButton } from '@/components/button';
 import { ListItem } from '@/components/listItem';
-import db, { setupDatabase, insertSampleData } from '@/db/database';
+import db, { setupDatabase, insertSampleData, getDatabase } from '@/db/database';
 
 export default function HomeScreen() {
   const screenWidth = Dimensions.get('window').width;
@@ -12,33 +12,55 @@ export default function HomeScreen() {
   useEffect(() => {
     async function loadData() {
       try {
-        await setupDatabase();        // Initialize DB
-        await insertSampleData();     // Then insert sample data
-        // Wait a short delay to ensure transactions commit
+        await setupDatabase(); // Ensure the database is set up
+
+        const database = await getDatabase();
+        if (!database) { 
+          console.error("Failed to initialize database."); 
+          return;
+        }
+  
+        await insertSampleData(); // Insert sample data
+  
         setTimeout(async () => {
-          await fetchRecentSessions();  // Then fetch sessions
-        }, 100);
+          await fetchRecentSessions();
+        }, 100); // Ensure transactions commit before fetching
+  
       } catch (err) {
         console.error(err);
       }
     }
+  
     loadData();
   }, []);
-
+  
   async function fetchRecentSessions() {
-    if (!db) return;
+    const database = await getDatabase();
+    if (!database) {
+      console.error('Database is not initialized.');
+      return;
+    }
+  
+    console.log('fetchRecentSessions() is running...');
+  
     try {
-      const results: any = await db.execAsync(`
-        SELECT s.id, s.date, s.duration, w.name AS workoutName
+      const results: any = await database.getAllAsync(`
+        SELECT s.*, w.name AS workoutName
         FROM session s
         LEFT JOIN workout w ON s.workoutId = w.id
         ORDER BY s.date DESC
         LIMIT 10;
       `);
-      const rows = results?.[0]?.rows || [];
-      setSessions(rows);
+      
+      if (!results || results.length === 0) {
+        console.log('No session data found in the database.');
+      } else {
+        console.log('Fetch results:', results);
+      }
+  
+      setSessions(results || []);
     } catch (error) {
-      console.error(error);
+      console.error('Error fetching sessions:', error);
     }
   }
 
